@@ -1,0 +1,639 @@
+{
+    "definition": {
+        "metadata": {
+            "notes": {}
+        },
+        "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+        "contentVersion": "1.0.0.0",
+        "triggers": {
+            "Recurrence": {
+                "recurrence": {
+                    "interval": 1,
+                    "frequency": "Day",
+                    "timeZone": "Central Europe Standard Time",
+                    "schedule": {
+                        "hours": [
+                            3
+                        ],
+                        "minutes": [
+                            0
+                        ]
+                    }
+                },
+                "evaluatedRecurrence": {
+                    "interval": 1,
+                    "frequency": "Day",
+                    "timeZone": "Central Europe Standard Time",
+                    "schedule": {
+                        "hours": [
+                            3
+                        ],
+                        "minutes": [
+                            0
+                        ]
+                    }
+                },
+                "type": "Recurrence",
+                "runtimeConfiguration": {
+                    "concurrency": {
+                        "runs": 1
+                    }
+                }
+            }
+        },
+        "actions": {
+            "List_Custom_Domains": {
+                "runAfter": {},
+                "type": "Http",
+                "inputs": {
+                    "uri": "https://management.azure.com@{parameters('frontDoorResourceId')}/customDomains?api-version=2025-04-15",
+                    "method": "GET",
+                    "authentication": {
+                        "type": "ManagedServiceIdentity"
+                    }
+                },
+                "runtimeConfiguration": {
+                    "contentTransfer": {
+                        "transferMode": "Chunked"
+                    }
+                }
+            },
+            "Parse_Custom_Domains": {
+                "runAfter": {
+                    "List_Custom_Domains": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "ParseJson",
+                "inputs": {
+                    "content": "@body('List_Custom_Domains')",
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "value": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "id": {
+                                            "type": "string"
+                                        },
+                                        "name": {
+                                            "type": "string"
+                                        },
+                                        "properties": {
+                                            "type": "object",
+                                            "properties": {
+                                                "hostName": {
+                                                    "type": "string"
+                                                },
+                                                "domainValidationState": {
+                                                    "type": "string"
+                                                }
+                                            }
+                                        }
+                                    },
+                                    "required": [
+                                        "id",
+                                        "name",
+                                        "properties"
+                                    ]
+                                }
+                            }
+                        },
+                        "required": [
+                            "value"
+                        ]
+                    }
+                }
+            },
+            "Filter_Pending_Revalidation": {
+                "runAfter": {
+                    "Parse_Custom_Domains": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Query",
+                "inputs": {
+                    "from": "@body('Parse_Custom_Domains')?['value']",
+                    "where": "@and(\n  endsWith(item()?['properties']?['hostName'], parameters('govZoneName')),\n  or(\n    equals(item()?['properties']?['domainValidationState'], 'PendingRevalidation'),\n    equals(item()?['properties']?['domainValidationState'], 'PendingValidation'),\n    equals(item()?['properties']?['domainValidationState'], 'TimedOut'),\n    equals(item()?['properties']?['domainValidationState'], 'Pending')\n  )\n)"
+                }
+            },
+            "For_Each_Pending_Domain": {
+                "foreach": "@body('Filter_Pending_Revalidation')",
+                "actions": {
+                    "If_validation_is_pending": {
+                        "actions": {
+                            "Get_GOV.CZ_TXT_records": {
+                                "type": "Http",
+                                "inputs": {
+                                    "uri": "@{parameters('dnsGovApiUrl')}/v1/domains/@{parameters('govDomainId')}/dns_records/?record_types=TXT&include_history=false&page=1&size=50",
+                                    "method": "GET",
+                                    "headers": {
+                                        "X-API-Key": "@{body('Get_gov.cz_API')?['value']}"
+                                    }
+                                },
+                                "runtimeConfiguration": {
+                                    "contentTransfer": {
+                                        "transferMode": "Chunked"
+                                    }
+                                }
+                            },
+                            "Parse_DNS_records": {
+                                "runAfter": {
+                                    "Get_GOV.CZ_TXT_records": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "type": "ParseJson",
+                                "inputs": {
+                                    "content": "@body('Get_GOV.CZ_TXT_records')",
+                                    "schema": {
+                                        "type": "object",
+                                        "properties": {
+                                            "items": {
+                                                "type": "array",
+                                                "items": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "id": {
+                                                            "type": "string"
+                                                        },
+                                                        "history_id": {
+                                                            "type": "string"
+                                                        },
+                                                        "domain_id": {
+                                                            "type": "string"
+                                                        },
+                                                        "name": {
+                                                            "type": "string"
+                                                        },
+                                                        "ttl": {
+                                                            "type": "integer"
+                                                        },
+                                                        "rdata_flags": {
+                                                            "type": "integer"
+                                                        },
+                                                        "rdata_tag": {
+                                                            "type": "string"
+                                                        },
+                                                        "rdata_value": {
+                                                            "type": "string"
+                                                        },
+                                                        "note": {
+                                                            "type": "string"
+                                                        },
+                                                        "valid_from": {
+                                                            "type": "string"
+                                                        },
+                                                        "valid_to": {},
+                                                        "record_type": {
+                                                            "type": "string"
+                                                        },
+                                                        "rdata_txt_data": {
+                                                            "type": "string"
+                                                        }
+                                                    },
+                                                    "required": [
+                                                        "id",
+                                                        "history_id",
+                                                        "domain_id",
+                                                        "name",
+                                                        "ttl",
+                                                        "note",
+                                                        "valid_from",
+                                                        "valid_to",
+                                                        "record_type"
+                                                    ]
+                                                }
+                                            },
+                                            "total": {
+                                                "type": "integer"
+                                            },
+                                            "page": {
+                                                "type": "integer"
+                                            },
+                                            "size": {
+                                                "type": "integer"
+                                            },
+                                            "pages": {
+                                                "type": "integer"
+                                            }
+                                        }
+                                    }
+                                }
+                            },
+                            "Filter_array": {
+                                "runAfter": {
+                                    "DNS_record_name": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "type": "Query",
+                                "inputs": {
+                                    "from": "@body('Parse_DNS_records')?['items']",
+                                    "where": "@equals(item()?['name'], outputs('DNS_record_name'))"
+                                }
+                            },
+                            "DNS_record_name": {
+                                "runAfter": {
+                                    "Parse_DNS_records": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "type": "Compose",
+                                "inputs": "@concat('_dnsauth', if(\n  equals(items('For_Each_Pending_Domain')?['properties']?['hostName'], parameters('govZoneName')),\n  '',\n  concat('.', first(\n    split(\n      items('For_Each_Pending_Domain')?['properties']?['hostName'],\n      concat('.', parameters('govZoneName'))\n    )\n  ))\n))"
+                            },
+                            "If_record_not_exists": {
+                                "actions": {
+                                    "Create_DNSAuth_TXT_record": {
+                                        "type": "Http",
+                                        "inputs": {
+                                            "uri": "@concat(parameters('dnsGovApiUrl'), '/v1/domains/',parameters('govDomainId'), '/dns_records/')",
+                                            "method": "POST",
+                                            "headers": {
+                                                "X-API-Key": "@{body('Get_gov.cz_API')?['value']}",
+                                                "Content-Type": "application/json"
+                                            },
+                                            "body": {
+                                                "domain_id": "@{parameters('govDomainId')}",
+                                                "name": "@{outputs('DNS_record_name')}",
+                                                "ttl": 3600,
+                                                "rdata_txt_data": "@{variables('currentValidationToken')}",
+                                                "record_type": "TXT"
+                                            }
+                                        },
+                                        "runtimeConfiguration": {
+                                            "contentTransfer": {
+                                                "transferMode": "Chunked"
+                                            }
+                                        }
+                                    }
+                                },
+                                "runAfter": {
+                                    "Compose_2": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "else": {
+                                    "actions": {
+                                        "Get_existing__dnsauth_TXT_record_id": {
+                                            "type": "Compose",
+                                            "inputs": "@first(body('Filter_array'))?['id']"
+                                        },
+                                        "If_TXT_value_is_different": {
+                                            "actions": {
+                                                "Update_DNSAuth_TXT_record": {
+                                                    "type": "Http",
+                                                    "inputs": {
+                                                        "uri": "@concat(parameters('dnsGovApiUrl'), '/v1/domains/',parameters('govDomainId'), '/dns_records/',outputs('Get_existing__dnsauth_TXT_record_id'))",
+                                                        "method": "PUT",
+                                                        "headers": {
+                                                            "X-API-Key": "@{body('Get_gov.cz_API')?['value']}",
+                                                            "Content-Type": "application/json"
+                                                        },
+                                                        "body": {
+                                                            "domain_id": "@{parameters('govDomainId')}",
+                                                            "record_id": "@{outputs('Get_existing__dnsauth_TXT_record_id')}",
+                                                            "name": "@{outputs('DNS_record_name')}",
+                                                            "ttl": 3600,
+                                                            "rdata_txt_data": "@{variables('currentValidationToken')}",
+                                                            "record_type": "TXT"
+                                                        }
+                                                    },
+                                                    "runtimeConfiguration": {
+                                                        "contentTransfer": {
+                                                            "transferMode": "Chunked"
+                                                        }
+                                                    }
+                                                }
+                                            },
+                                            "runAfter": {
+                                                "Get_existing__dnsauth_TXT_record_id": [
+                                                    "Succeeded"
+                                                ]
+                                            },
+                                            "else": {
+                                                "actions": {}
+                                            },
+                                            "expression": {
+                                                "and": [
+                                                    {
+                                                        "not": {
+                                                            "equals": [
+                                                                "@first(body('Filter_array'))?['rdata_txt_data']",
+                                                                "@variables('currentValidationToken')"
+                                                            ]
+                                                        }
+                                                    }
+                                                ]
+                                            },
+                                            "type": "If"
+                                        }
+                                    }
+                                },
+                                "expression": {
+                                    "and": [
+                                        {
+                                            "equals": [
+                                                "@empty(body('Filter_array'))",
+                                                "@true"
+                                            ]
+                                        }
+                                    ]
+                                },
+                                "type": "If"
+                            },
+                            "Compose_2": {
+                                "runAfter": {
+                                    "Filter_array": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "type": "Compose",
+                                "inputs": "@variables('currentValidationToken')"
+                            }
+                        },
+                        "runAfter": {
+                            "If_regenerate_token_needed": [
+                                "Succeeded"
+                            ]
+                        },
+                        "else": {
+                            "actions": {}
+                        },
+                        "expression": {
+                            "and": [
+                                {
+                                    "equals": [
+                                        "@variables('currentValidationState')",
+                                        "Pending"
+                                    ]
+                                }
+                            ]
+                        },
+                        "type": "If"
+                    },
+                    "If_regenerate_token_needed": {
+                        "actions": {
+                            "Request_New_Validation_Token": {
+                                "type": "Http",
+                                "inputs": {
+                                    "uri": "@concat('https://management.azure.com', item()?['id'], '/refreshValidationToken?api-version=2025-04-15')",
+                                    "method": "POST",
+                                    "authentication": {
+                                        "type": "ManagedServiceIdentity",
+                                        "audience": "https://management.azure.com/"
+                                    }
+                                }
+                            },
+                            "Set_new_token": {
+                                "runAfter": {
+                                    "Parse_JSON_Validation_response": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "type": "SetVariable",
+                                "inputs": {
+                                    "name": "currentValidationState",
+                                    "value": "@body('Parse_JSON_Validation_response')?['properties']?['validationProperties']?['validationToken']"
+                                }
+                            },
+                            "Parse_JSON_Validation_response": {
+                                "runAfter": {
+                                    "Request_New_Validation_Token": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "type": "ParseJson",
+                                "inputs": {
+                                    "content": "@body('Request_New_Validation_Token')",
+                                    "schema": {
+                                        "type": "object",
+                                        "properties": {
+                                            "id": {
+                                                "type": "string"
+                                            },
+                                            "type": {
+                                                "type": "string"
+                                            },
+                                            "name": {
+                                                "type": "string"
+                                            },
+                                            "properties": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "hostName": {
+                                                        "type": "string"
+                                                    },
+                                                    "tlsSettings": {
+                                                        "type": "object",
+                                                        "properties": {
+                                                            "certificateType": {
+                                                                "type": "string"
+                                                            },
+                                                            "minimumTlsVersion": {
+                                                                "type": "string"
+                                                            },
+                                                            "cipherSuiteSetType": {
+                                                                "type": "string"
+                                                            },
+                                                            "customizedCipherSuiteSet": {},
+                                                            "secret": {}
+                                                        }
+                                                    },
+                                                    "validationProperties": {
+                                                        "type": "object",
+                                                        "properties": {
+                                                            "validationToken": {
+                                                                "type": "string"
+                                                            },
+                                                            "expirationDate": {
+                                                                "type": "string"
+                                                            }
+                                                        }
+                                                    },
+                                                    "azureDnsZone": {
+                                                        "type": "object",
+                                                        "properties": {
+                                                            "id": {
+                                                                "type": "string"
+                                                            }
+                                                        }
+                                                    },
+                                                    "domainValidationState": {
+                                                        "type": "string"
+                                                    },
+                                                    "preValidatedCustomDomainResourceId": {},
+                                                    "referencedRoutePaths": {},
+                                                    "extendedProperties": {},
+                                                    "provisioningState": {
+                                                        "type": "string"
+                                                    },
+                                                    "deploymentStatus": {
+                                                        "type": "string"
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            },
+                            "Set_new_validation_state": {
+                                "runAfter": {
+                                    "Set_new_token": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "type": "SetVariable",
+                                "inputs": {
+                                    "name": "currentValidationState",
+                                    "value": "@body('Parse_JSON_Validation_response')?['properties']?['validationProperties']?['validationState']"
+                                }
+                            }
+                        },
+                        "runAfter": {
+                            "Set_current_validation_state": [
+                                "Succeeded"
+                            ]
+                        },
+                        "else": {
+                            "actions": {}
+                        },
+                        "expression": {
+                            "and": [
+                                {
+                                    "not": {
+                                        "equals": [
+                                            "@items('For_Each_Pending_Domain')?['properties']?['domainValidationState']",
+                                            "Pending"
+                                        ]
+                                    }
+                                }
+                            ]
+                        },
+                        "type": "If"
+                    },
+                    "Set_current_validation_token": {
+                        "type": "SetVariable",
+                        "inputs": {
+                            "name": "currentValidationToken",
+                            "value": "@items('For_Each_Pending_Domain')?['properties']?['validationProperties']?['validationToken']"
+                        }
+                    },
+                    "Set_current_validation_state": {
+                        "runAfter": {
+                            "Set_current_validation_token": [
+                                "Succeeded"
+                            ]
+                        },
+                        "type": "SetVariable",
+                        "inputs": {
+                            "name": "currentValidationState",
+                            "value": "@items('For_Each_Pending_Domain')?['properties']?['domainValidationState']"
+                        }
+                    }
+                },
+                "runAfter": {
+                    "Initialize_variables": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Foreach",
+                "runtimeConfiguration": {
+                    "concurrency": {
+                        "repetitions": 1
+                    }
+                }
+            },
+            "Get_gov.cz_API": {
+                "runAfter": {
+                    "Filter_Pending_Revalidation": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "ApiConnection",
+                "inputs": {
+                    "host": {
+                        "connection": {
+                            "name": "@parameters('$connections')['keyvault']['connectionId']"
+                        }
+                    },
+                    "method": "get",
+                    "path": "/secrets/@{encodeURIComponent('govcz-api-key')}/value"
+                },
+                "runtimeConfiguration": {
+                    "secureData": {
+                        "properties": [
+                            "inputs",
+                            "outputs"
+                        ]
+                    }
+                }
+            },
+            "Initialize_variables": {
+                "runAfter": {
+                    "Get_gov.cz_API": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable",
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "currentValidationToken",
+                            "type": "string"
+                        },
+                        {
+                            "name": "currentValidationState",
+                            "type": "string"
+                        }
+                    ]
+                }
+            }
+        },
+        "outputs": {},
+        "parameters": {
+            "dnsGovApiUrl": {
+                "defaultValue": "'https://api.dnsportal.gov.cz/",
+                "type": "String"
+            },
+            "govZoneName": {
+                "defaultValue": "contoso.gov.cz",
+                "type": "String"
+            },
+            "govDomainId": {
+                "defaultValue": "25cc0cf3-081d-4cf6-899f-0ab786765a9b",
+                "type": "String"
+            },
+            "frontDoorResourceId": {
+                "defaultValue": "/subscriptions/17ab5b7a-9070-406c-811d-c3bf2b2c9371/resourcegroups/shared/providers/Microsoft.Cdn/profiles/fdmachv",
+                "type": "String"
+            },
+            "$connections": {
+                "type": "Object",
+                "defaultValue": {}
+            }
+        }
+    },
+    "parameters": {
+        "dnsGovApiUrl": {
+            "value": "https://dnsportal-api-mock.mangohill-ab4a40a3.francecentral.azurecontainerapps.io/"
+        },
+        "$connections": {
+            "type": "Object",
+            "value": {
+                "keyvault": {
+                    "id": "/subscriptions/17ab5b7a-9070-406c-811d-c3bf2b2c9371/providers/Microsoft.Web/locations/swedencentral/managedApis/keyvault",
+                    "connectionId": "/subscriptions/17ab5b7a-9070-406c-811d-c3bf2b2c9371/resourceGroups/la-fd-dns_group/providers/Microsoft.Web/connections/keyvault",
+                    "connectionName": "keyvault",
+                    "connectionProperties": {
+                        "authentication": {
+                            "type": "ManagedServiceIdentity"
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
