@@ -42,7 +42,7 @@
             }
         },
         "actions": {
-            "List_Custom_Domains": {
+            "List_Front_Door_Custom_Domains": {
                 "runAfter": {},
                 "type": "Http",
                 "inputs": {
@@ -58,15 +58,15 @@
                     }
                 }
             },
-            "Parse_Custom_Domains": {
+            "Parse_Custom_Domains_response": {
                 "runAfter": {
-                    "List_Custom_Domains": [
+                    "List_Front_Door_Custom_Domains": [
                         "Succeeded"
                     ]
                 },
                 "type": "ParseJson",
                 "inputs": {
-                    "content": "@body('List_Custom_Domains')",
+                    "content": "@body('List_Front_Door_Custom_Domains')",
                     "schema": {
                         "type": "object",
                         "properties": {
@@ -107,20 +107,20 @@
                     }
                 }
             },
-            "Filter_Pending_Revalidation": {
+            "Filter_Domains_with_pending_DNS_validation": {
                 "runAfter": {
-                    "Parse_Custom_Domains": [
+                    "Parse_Custom_Domains_response": [
                         "Succeeded"
                     ]
                 },
                 "type": "Query",
                 "inputs": {
-                    "from": "@body('Parse_Custom_Domains')?['value']",
+                    "from": "@body('Parse_Custom_Domains_response')?['value']",
                     "where": "@and(\n  endsWith(item()?['properties']?['hostName'], parameters('govZoneName')),\n  or(\n    equals(item()?['properties']?['domainValidationState'], 'PendingRevalidation'),\n    equals(item()?['properties']?['domainValidationState'], 'PendingValidation'),\n    equals(item()?['properties']?['domainValidationState'], 'TimedOut'),\n    equals(item()?['properties']?['domainValidationState'], 'Pending')\n  )\n)"
                 }
             },
             "For_Each_Pending_Domain": {
-                "foreach": "@body('Filter_Pending_Revalidation')",
+                "foreach": "@body('Filter_Domains_with_pending_DNS_validation')",
                 "actions": {
                     "If_validation_is_pending": {
                         "actions": {
@@ -130,7 +130,7 @@
                                     "uri": "@{parameters('dnsGovApiUrl')}/v1/domains/@{parameters('govDomainId')}/dns_records/?record_types=TXT&include_history=false&page=1&size=50",
                                     "method": "GET",
                                     "headers": {
-                                        "X-API-Key": "@{body('Get_gov.cz_API')?['value']}"
+                                        "X-API-Key": "@{body('Get_gov.cz_DNS_API_key')?['value']}"
                                     }
                                 },
                                 "runtimeConfiguration": {
@@ -252,7 +252,7 @@
                                             "uri": "@concat(parameters('dnsGovApiUrl'), '/v1/domains/',parameters('govDomainId'), '/dns_records/')",
                                             "method": "POST",
                                             "headers": {
-                                                "X-API-Key": "@{body('Get_gov.cz_API')?['value']}",
+                                                "X-API-Key": "@{body('Get_gov.cz_DNS_API_key')?['value']}",
                                                 "Content-Type": "application/json"
                                             },
                                             "body": {
@@ -289,7 +289,7 @@
                                                         "uri": "@concat(parameters('dnsGovApiUrl'), '/v1/domains/',parameters('govDomainId'), '/dns_records/',outputs('Get_existing__dnsauth_TXT_record_id'))",
                                                         "method": "PUT",
                                                         "headers": {
-                                                            "X-API-Key": "@{body('Get_gov.cz_API')?['value']}",
+                                                            "X-API-Key": "@{body('Get_gov.cz_DNS_API_key')?['value']}",
                                                             "Content-Type": "application/json"
                                                         },
                                                         "body": {
@@ -546,9 +546,9 @@
                     }
                 }
             },
-            "Get_gov.cz_API": {
+            "Get_gov.cz_DNS_API_key": {
                 "runAfter": {
-                    "Filter_Pending_Revalidation": [
+                    "Filter_Domains_with_pending_DNS_validation": [
                         "Succeeded"
                     ]
                 },
@@ -573,7 +573,7 @@
             },
             "Initialize_variables": {
                 "runAfter": {
-                    "Get_gov.cz_API": [
+                    "Validate_translated_ID_with_configured_ID": [
                         "Succeeded"
                     ]
                 },
@@ -590,6 +590,62 @@
                         }
                     ]
                 }
+            },
+            "Translate_FQDN_to_GOV.CZ_ID": {
+                "runAfter": {
+                    "Get_gov.cz_DNS_API_key": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Http",
+                "inputs": {
+                    "uri": "@{parameters('dnsGovApiUrl')}/v1/fqdn_translation/?fqdn=@{parameters('govZoneName')}",
+                    "method": "GET",
+                    "headers": {
+                        "X-API-Key": "@{body('Get_gov.cz_DNS_API_key')?['value']}",
+                        "Accept": "application/text"
+                    }
+                },
+                "runtimeConfiguration": {
+                    "contentTransfer": {
+                        "transferMode": "Chunked"
+                    }
+                }
+            },
+            "Validate_translated_ID_with_configured_ID": {
+                "actions": {
+                    "Terminate": {
+                        "type": "Terminate",
+                        "inputs": {
+                            "runStatus": "Failed",
+                            "runError": {
+                                "code": "50",
+                                "message": "Translated ID of domain does not correspond with configured on Logic App."
+                            }
+                        }
+                    }
+                },
+                "runAfter": {
+                    "Translate_FQDN_to_GOV.CZ_ID": [
+                        "Succeeded"
+                    ]
+                },
+                "else": {
+                    "actions": {}
+                },
+                "expression": {
+                    "and": [
+                        {
+                            "not": {
+                                "equals": [
+                                    "@body('Translate_FQDN_to_GOV.CZ_ID')",
+                                    "@parameters('govDomainId')"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                "type": "If"
             }
         },
         "outputs": {},
@@ -603,7 +659,7 @@
                 "type": "String"
             },
             "govDomainId": {
-                "defaultValue": "25cc0cf3-081d-4cf6-899f-0ab786765a9b",
+                "defaultValue": "00000000-0000-0000-0000-000000000001",
                 "type": "String"
             },
             "frontDoorResourceId": {
@@ -618,15 +674,24 @@
     },
     "parameters": {
         "dnsGovApiUrl": {
-            "value": "https://dnsportal-api-mock.mangohill-ab4a40a3.francecentral.azurecontainerapps.io/"
+            "value": "https://dnsportal-api-mock.mangohill-ab4a40a3.francecentral.azurecontainerapps.io"
+        },
+        "govZoneName": {
+            "value": "contoso.gov.cz"
+        },
+        "govDomainId": {
+            "value": "dc3cabe2-5ce6-451c-be4c-4b67c2da3270"
+        },
+        "frontDoorResourceId": {
+            "value": "/subscriptions/17ab5b7a-9070-406c-811d-c3bf2b2c9371/resourceGroups/shared/providers/Microsoft.Cdn/profiles/fdmachv"
         },
         "$connections": {
             "type": "Object",
             "value": {
                 "keyvault": {
-                    "id": "/subscriptions/17ab5b7a-9070-406c-811d-c3bf2b2c9371/providers/Microsoft.Web/locations/swedencentral/managedApis/keyvault",
-                    "connectionId": "/subscriptions/17ab5b7a-9070-406c-811d-c3bf2b2c9371/resourceGroups/la-fd-dns_group/providers/Microsoft.Web/connections/keyvault",
-                    "connectionName": "keyvault",
+                    "id": "/subscriptions/17ab5b7a-9070-406c-811d-c3bf2b2c9371/providers/Microsoft.Web/locations/francecentral/managedApis/keyvault",
+                    "connectionId": "/subscriptions/17ab5b7a-9070-406c-811d-c3bf2b2c9371/resourceGroups/rg-govdns/providers/Microsoft.Web/connections/la-govcz-fd-keyvault",
+                    "connectionName": "la-govcz-fd-keyvault",
                     "connectionProperties": {
                         "authentication": {
                             "type": "ManagedServiceIdentity"
