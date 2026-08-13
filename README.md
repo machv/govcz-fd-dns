@@ -40,26 +40,18 @@ az deployment group create \
 
 ## Grant rights to send email
 
+Logic App uses User-assigned Managed Identity to call Graph API to send email from mailbox (can be shared one). In order to do that it needs `Mail.Send` permission.
+
 ```powershell
+$managedIdentityServicePrincipalId = az ad sp list --filter "displayName eq 'mi-govczdns'" --query "[0].id" --output tsv
+$microsoftGraphServicePrincipalId = az ad sp list --filter "appId eq '00000003-0000-0000-c000-000000000000'" --query "[0].id" --output tsv
+$appRoleId = az ad sp list --filter "appId eq '00000003-0000-0000-c000-000000000000'" --query "[0].appRoles[?value=='Mail.Send' && contains(allowedMemberTypes, 'Application')].id | [0]" --output tsv
 
-# $samiSPid = "8fc9b78e-ca89-424e-bdd6-beea4ea5637a"
-az ad sp list --filter "displayName eq 'mi-govczdns'" --query "[0].id" --output tsv
-# $graphSPid = "1c47ec61-21f9-4c23-a46c-eae202797c3e"
-az ad sp list --filter "appId eq '00000003-0000-0000-c000-000000000000'" --query "[0].id" --output tsv
-# $appRoleId = "b633e1c5-b582-4048-a93e-9f11b44c7e96"
-az ad sp list --filter "appId eq '00000003-0000-0000-c000-000000000000'" --query "[0].appRoles[?value=='Mail.Send' && contains(allowedMemberTypes, 'Application')].id | [0]" --output tsv
-
-Connect-AzAccount
-$samiName = 'cptlogicapp' # Name of system-assigned managed identity - same as Logic App name
-$samiSP = Get-AzADServicePrincipal -Filter "displayName eq '$samiName'"
-$graphSP = Get-AzADServicePrincipal -Filter "appId eq '00000003-0000-0000-c000-000000000000'"
-$permission = 'Mail.Send' # send an email on behalf of another user
-$appRole = $graphSP.AppRole | Where-Object {($_.Value -in $permission) -and ($_.AllowedMemberType -contains "Application")}
 
 Connect-MgGraph -Scopes 'Directory.ReadWrite.All','User.Read','Application.ReadWrite.All','AppRoleAssignment.ReadWrite.All','DelegatedPermissionGrant.ReadWrite.All'
 $appRoleAssignment = @{
-  "PrincipalId" = $samiSPid
-  "ResourceId" = $graphSPid
+  "PrincipalId" = $managedIdentityServicePrincipalId
+  "ResourceId" = $microsoftGraphServicePrincipalId
   "AppRoleId" = $appRoleId
 }
 New-MgServicePrincipalAppRoleAssignment -ServicePrincipalId $appRoleAssignment.PrincipalId -BodyParameter $appRoleAssignment -Verbose
