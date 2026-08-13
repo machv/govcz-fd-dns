@@ -15,8 +15,8 @@ param keyVaultConnectionName string = '${logicAppName}-keyvault'
 @description('Full resource ID of the existing Azure Front Door Standard/Premium profile. The profile can be in another resource group or subscription in the same tenant.')
 param frontDoorResourceId string
 
-@description('Base URL of the GOV.CZ DNS API.')
-param dnsGovApiUrl string
+@description('Optional base URL of the GOV.CZ DNS API. When empty, the Logic App parameter is not set.')
+param dnsGovApiUrl string = ''
 
 @description('GOV.CZ domain name managed by the workflow.')
 param govZoneName string
@@ -126,9 +126,11 @@ resource logicApp 'Microsoft.Logic/workflows@2019-05-01' = {
     state: 'Enabled'
     definition: workflowSource.definition
     parameters: {
-      dnsGovApiUrl: {
-        value: normalizedDnsGovApiUrl
-      }
+      ...(!empty(dnsGovApiUrl) ? {
+        dnsGovApiUrl: {
+          value: normalizedDnsGovApiUrl
+        }
+      } : {})
       govZoneName: {
         value: govZoneName
       }
