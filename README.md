@@ -1,4 +1,8 @@
-# Logic App pro automatizaci validačních TXT záznamů pro Azure Front Door
+# Automatizace validačních TXT záznamů Azure Front Door pro GOV.CZ
+
+Zóny hostované v rámci GOV.CZ DNS infrastruktury umožňují API přístup pro automatizaci správy DNS záznamů. Tato Logic App automaticky pro vybraný Front Door profil sleduje přidané domény a pokud je potřeba TXT záznam přidat/změnit, automaticky, s využitím API klíče (s oprávněním `write`), změnu provede. Notifikace o průběhu se posílají na e-mail s využitím Graph API (a tedy není potřeba žádné dodatečné licence).
+
+## Nasazení Logic App
 
 Šablona `main.bicep` nasadí:
 
@@ -38,10 +42,10 @@ export GOVCZ_API_KEY='<api-key>'
 az group create --location swedencentral --name rg-govdns
 
 # První nasazení včetně API klíče v Key Vault
-az deployment group create --resource-group <RG-NAME> --parameters main.bicepparam --parameters deployApiKeySecret=true
+az deployment group create --resource-group rg-govdns --parameters main.bicepparam --parameters deployApiKeySecret=true
 
 # Při dalších nasazeních lze aktualizaci tajného klíče vynechat (výchozí chování)
-az deployment group create --resource-group <RG-NAME> --parameters main.bicepparam
+az deployment group create --resource-group rg-govdns --parameters main.bicepparam
 ```
 
 Případně lze všechny parametry předat explicitně:
