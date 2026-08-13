@@ -816,7 +816,7 @@
                     ]
                 },
                 "type": "Compose",
-                "inputs": "@if(\n  empty(body('Filter_Domains_with_pending_DNS_validation')),\n  concat('Všechny domény (', string(length(body('Parse_Custom_Domains_response'))) ,') jsou v pořádku.'), concat(\n  '<p>Domény čekající na validaci:</p><ul>',\n  join(body('[Email_Notification]_Select_domains'), ''),\n  '</ul>'\n))"
+                "inputs": "@if(\n  empty(body('Filter_Domains_with_pending_DNS_validation')),\n  concat('Všechny domény (', string(length(body('Parse_Custom_Domains_response')?['value'])) ,') jsou v pořádku.'), concat(\n  '<p>Domény čekající na validaci:</p><ul>',\n  join(body('[Email_Notification]_Select_domains'), ''),\n  '</ul>'\n))"
             },
             "[Email_Notification]_Select_domains": {
                 "runAfter": {
