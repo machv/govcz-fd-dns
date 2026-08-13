@@ -24,9 +24,18 @@ param govZoneName string
 @description('GOV.CZ domain ID managed by the workflow.')
 param govDomainId string
 
+@description('User principal name of the mailbox used to send notification emails.')
+param emailNotificationSenderUpn string
+
+@description('Email address that receives workflow notifications.')
+param emailNotificationReceipient string
+
 @secure()
 @description('GOV.CZ API key stored as the govcz-api-key Key Vault secret.')
 param govCzApiKey string
+
+@description('Create or update the govcz-api-key Key Vault secret.')
+param deployApiKeySecret bool = false
 
 @description('Grant the identity executing this deployment the Key Vault Secrets Officer role on the deployed Key Vault.')
 param grantKeyVaultSecretsOfficerToDeployer bool = false
@@ -55,6 +64,11 @@ var normalizedDnsGovApiUrl = endsWith(dnsGovApiUrl, '/')
   ? substring(dnsGovApiUrl, 0, max([length(dnsGovApiUrl) - 1, 0]))
   : dnsGovApiUrl
 
+resource managedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2018-11-30' = {
+  name: 'mi-govczdns'
+  location: location
+}
+
 resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
   name: keyVaultName
   location: location
@@ -72,7 +86,7 @@ resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
   }
 }
 
-resource govCzApiKeySecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
+resource govCzApiKeySecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = if (deployApiKeySecret) {
   parent: keyVault
   name: keyVaultSecretName
   properties: {
@@ -101,7 +115,10 @@ resource logicApp 'Microsoft.Logic/workflows@2019-05-01' = {
   location: location
   tags: tags
   identity: {
-    type: 'SystemAssigned'
+    type: 'UserAssigned'
+    userAssignedIdentities: {
+      '${managedIdentity.id}': {}
+    }
   }
   properties: {
     state: 'Enabled'
@@ -116,8 +133,17 @@ resource logicApp 'Microsoft.Logic/workflows@2019-05-01' = {
       govDomainId: {
         value: govDomainId
       }
+      emailNotificationSenderUpn: {
+        value: emailNotificationSenderUpn
+      }
+      emailNotificationReceipient: {
+        value: emailNotificationReceipient
+      }
       frontDoorResourceId: {
         value: frontDoorResourceId
+      }
+      managedIdentityResourceId: {
+        value: managedIdentity.id
       }
       '$connections': {
         value: {
@@ -128,6 +154,7 @@ resource logicApp 'Microsoft.Logic/workflows@2019-05-01' = {
             connectionProperties: {
               authentication: {
                 type: 'ManagedServiceIdentity'
+                identity: managedIdentity.id
               }
             }
           }
@@ -138,11 +165,11 @@ resource logicApp 'Microsoft.Logic/workflows@2019-05-01' = {
 }
 
 resource keyVaultSecretsUserAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(keyVault.id, logicApp.id, keyVaultSecretsUserRoleDefinitionId)
+  name: guid(keyVault.id, managedIdentity.id, keyVaultSecretsUserRoleDefinitionId)
   scope: keyVault
   properties: {
     roleDefinitionId: keyVaultSecretsUserRoleDefinitionId
-    principalId: logicApp.identity.principalId
+    principalId: managedIdentity.properties.principalId
     principalType: 'ServicePrincipal'
   }
 }
@@ -157,15 +184,15 @@ resource keyVaultSecretsOfficerDeployerAssignment 'Microsoft.Authorization/roleA
 }
 
 module frontDoorRbac 'front-door-rbac.bicep' = {
-  name: 'front-door-rbac-${uniqueString(frontDoorResourceId, logicApp.id)}'
+  name: 'front-door-rbac-${uniqueString(frontDoorResourceId, managedIdentity.id)}'
   scope: resourceGroup(frontDoorSubscriptionId, frontDoorResourceGroupName)
   params: {
     frontDoorProfileName: frontDoorProfileName
-    principalId: logicApp.identity.principalId
+    principalId: managedIdentity.properties.principalId
   }
 }
 
 output logicAppResourceId string = logicApp.id
-output logicAppPrincipalId string = logicApp.identity.principalId
+output logicAppPrincipalId string = managedIdentity.properties.principalId
 output keyVaultResourceId string = keyVault.id
 output keyVaultConnectionResourceId string = keyVaultConnection.id

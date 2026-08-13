@@ -49,7 +49,8 @@
                     "uri": "https://management.azure.com@{parameters('frontDoorResourceId')}/customDomains?api-version=2025-04-15",
                     "method": "GET",
                     "authentication": {
-                        "type": "ManagedServiceIdentity"
+                        "type": "ManagedServiceIdentity",
+                        "identity": "@parameters('managedIdentityResourceId')"
                     }
                 },
                 "runtimeConfiguration": {
@@ -268,6 +269,47 @@
                                                 "transferMode": "Chunked"
                                             }
                                         }
+                                    },
+                                    "Email_notification_-_Create_TXT": {
+                                        "runAfter": {
+                                            "Create_DNSAuth_TXT_record": [
+                                                "Succeeded"
+                                            ]
+                                        },
+                                        "type": "Http",
+                                        "inputs": {
+                                            "uri": "https://graph.microsoft.com/v1.0/users/@{parameters('emailNotificationSenderUpn')}/sendMail",
+                                            "method": "POST",
+                                            "headers": {
+                                                "Content-Type": "application/json"
+                                            },
+                                            "body": {
+                                                "message": {
+                                                    "subject": "[GOV.CZ DNS] @{items('For_Each_Pending_Domain')?['properties']?['hostName']} - TXT založen",
+                                                    "body": {
+                                                        "contentType": "HTML",
+                                                        "content": "<strong>Front Door:</strong> @{parameters('frontDoorResourceId')}<hr><strong>Status code:</strong>@{outputs('Create_DNSAuth_TXT_record')?['statusCode']}<br><strong>Požadavek:</strong><pre>@{body('Create_DNSAuth_TXT_record')}</pre>"
+                                                    },
+                                                    "toRecipients": [
+                                                        {
+                                                            "emailAddress": {
+                                                                "address": "@{parameters('emailNotificationReceipient')}"
+                                                            }
+                                                        }
+                                                    ]
+                                                }
+                                            },
+                                            "authentication": {
+                                                "type": "ManagedServiceIdentity",
+                                                "identity": "@parameters('managedIdentityResourceId')",
+                                                "audience": "https://graph.microsoft.com"
+                                            }
+                                        },
+                                        "runtimeConfiguration": {
+                                            "contentTransfer": {
+                                                "transferMode": "Chunked"
+                                            }
+                                        }
                                     }
                                 },
                                 "runAfter": {
@@ -306,6 +348,47 @@
                                                             "transferMode": "Chunked"
                                                         }
                                                     }
+                                                },
+                                                "Email_notification_-_Updated_TXT": {
+                                                    "runAfter": {
+                                                        "Update_DNSAuth_TXT_record": [
+                                                            "Succeeded"
+                                                        ]
+                                                    },
+                                                    "type": "Http",
+                                                    "inputs": {
+                                                        "uri": "https://graph.microsoft.com/v1.0/users/@{parameters('emailNotificationSenderUpn')}/sendMail",
+                                                        "method": "POST",
+                                                        "headers": {
+                                                            "Content-Type": "application/json"
+                                                        },
+                                                        "body": {
+                                                            "message": {
+                                                                "subject": "[GOV.CZ DNS] @{items('For_Each_Pending_Domain')?['properties']?['hostName']} - TXT upraven",
+                                                                "body": {
+                                                                    "contentType": "HTML",
+                                                                    "content": "<strong>Front Door:</strong> @{parameters('frontDoorResourceId')}<hr>Stavový kód: @{outputs('Update_DNSAuth_TXT_record')?['statusCode']}<br>Požadavek:<pre>@{body('Update_DNSAuth_TXT_record')}</pre>"
+                                                                },
+                                                                "toRecipients": [
+                                                                    {
+                                                                        "emailAddress": {
+                                                                            "address": "@{parameters('emailNotificationReceipient')}"
+                                                                        }
+                                                                    }
+                                                                ]
+                                                            }
+                                                        },
+                                                        "authentication": {
+                                                            "type": "ManagedServiceIdentity",
+                                                            "identity": "@parameters('managedIdentityResourceId')",
+                                                            "audience": "https://graph.microsoft.com"
+                                                        }
+                                                    },
+                                                    "runtimeConfiguration": {
+                                                        "contentTransfer": {
+                                                            "transferMode": "Chunked"
+                                                        }
+                                                    }
                                                 }
                                             },
                                             "runAfter": {
@@ -314,7 +397,44 @@
                                                 ]
                                             },
                                             "else": {
-                                                "actions": {}
+                                                "actions": {
+                                                    "Email_notification_-_TXT_is_up-to-date": {
+                                                        "type": "Http",
+                                                        "inputs": {
+                                                            "uri": "https://graph.microsoft.com/v1.0/users/@{parameters('emailNotificationSenderUpn')}/sendMail",
+                                                            "method": "POST",
+                                                            "headers": {
+                                                                "Content-Type": "application/json"
+                                                            },
+                                                            "body": {
+                                                                "message": {
+                                                                    "subject": "[GOV.CZ DNS] @{items('For_Each_Pending_Domain')?['properties']?['hostName']} - TXT nebylo potřeba měnit",
+                                                                    "body": {
+                                                                        "contentType": "HTML",
+                                                                        "content": "<strong>Front Door:</strong> @{parameters('frontDoorResourceId')}<hr>Hodnota v GOV.CZ zóně je @{first(body('Filter_array'))?['rdata_txt_data']} pro @{outputs('DNS_record_name')}"
+                                                                    },
+                                                                    "toRecipients": [
+                                                                        {
+                                                                            "emailAddress": {
+                                                                                "address": "@{parameters('emailNotificationReceipient')}"
+                                                                            }
+                                                                        }
+                                                                    ]
+                                                                }
+                                                            },
+                                                            "authentication": {
+                                                                "type": "ManagedServiceIdentity",
+                                                                "identity": "@parameters('managedIdentityResourceId')",
+                                                                "audience": "https://graph.microsoft.com"
+                                                            }
+                                                        },
+                                                        "runtimeConfiguration": {
+                                                            "contentTransfer": {
+                                                                "transferMode": "Chunked"
+                                                            }
+                                                        }
+                                                    }
+                                                }
                                             },
                                             "expression": {
                                                 "and": [
@@ -383,6 +503,7 @@
                                     "method": "POST",
                                     "authentication": {
                                         "type": "ManagedServiceIdentity",
+                                        "identity": "@parameters('managedIdentityResourceId')",
                                         "audience": "https://management.azure.com/"
                                     }
                                 }
@@ -626,7 +747,7 @@
                     }
                 },
                 "runAfter": {
-                    "Translate_FQDN_to_GOV.CZ_ID": [
+                    "Send_email_notification": [
                         "Succeeded"
                     ]
                 },
@@ -646,6 +767,68 @@
                     ]
                 },
                 "type": "If"
+            },
+            "Send_email_notification": {
+                "runAfter": {
+                    "[Email_Notification]_Compose_list_of_domains": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Http",
+                "inputs": {
+                    "uri": "https://graph.microsoft.com/v1.0/users/@{parameters('emailNotificationSenderUpn')}/sendMail",
+                    "method": "POST",
+                    "headers": {
+                        "Content-Type": "application/json"
+                    },
+                    "body": {
+                        "message": {
+                            "subject": "[GOV.CZ DNS] Seznam domén k validaci",
+                            "body": {
+                                "contentType": "HTML",
+                                "content": "<strong>Front Door:</strong> @{parameters('frontDoorResourceId')}<hr>@{outputs('[Email_Notification]_Compose_list_of_domains')}"
+                            },
+                            "toRecipients": [
+                                {
+                                    "emailAddress": {
+                                        "address": "@{parameters('emailNotificationReceipient')}"
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "authentication": {
+                        "type": "ManagedServiceIdentity",
+                        "identity": "@parameters('managedIdentityResourceId')",
+                        "audience": "https://graph.microsoft.com"
+                    }
+                },
+                "runtimeConfiguration": {
+                    "contentTransfer": {
+                        "transferMode": "Chunked"
+                    }
+                }
+            },
+            "[Email_Notification]_Compose_list_of_domains": {
+                "runAfter": {
+                    "[Email_Notification]_Select_domains": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Compose",
+                "inputs": "@if(\n  empty(body('Filter_Domains_with_pending_DNS_validation')),\n  concat('Všechny domény (', string(length(body('Parse_Custom_Domains_response'))) ,') jsou v pořádku.'), concat(\n  '<p>Domény čekající na validaci:</p><ul>',\n  join(body('[Email_Notification]_Select_domains'), ''),\n  '</ul>'\n))"
+            },
+            "[Email_Notification]_Select_domains": {
+                "runAfter": {
+                    "Translate_FQDN_to_GOV.CZ_ID": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Select",
+                "inputs": {
+                    "from": "@body('Filter_Domains_with_pending_DNS_validation')",
+                    "select": "@concat(\n  '<li>',\n  item()?['properties']?['hostName'],\n  ' (',\n  item()?['properties']?['domainValidationState'],\n  ')</li>'\n)"
+                }
             }
         },
         "outputs": {},
@@ -663,7 +846,19 @@
                 "type": "String"
             },
             "frontDoorResourceId": {
-                "defaultValue": "/subscriptions/17ab5b7a-9070-406c-811d-c3bf2b2c9371/resourcegroups/shared/providers/Microsoft.Cdn/profiles/fdmachv",
+                "defaultValue": "/subscriptions/00000000-0000-0000-0000-000000000001/resourcegroups/rg/providers/Microsoft.Cdn/profiles/frontdoorprofile",
+                "type": "String"
+            },
+            "managedIdentityResourceId": {
+                "defaultValue": "",
+                "type": "String"
+            },
+            "emailNotificationSenderUpn": {
+                "defaultValue": "sluzebnicek@contoso.gov.cz",
+                "type": "String"
+            },
+            "emailNotificationReceipient": {
+                "defaultValue": "info@contoso.gov.cz",
                 "type": "String"
             },
             "$connections": {
@@ -673,32 +868,5 @@
         }
     },
     "parameters": {
-        "dnsGovApiUrl": {
-            "value": "https://dnsportal-api-mock.mangohill-ab4a40a3.francecentral.azurecontainerapps.io"
-        },
-        "govZoneName": {
-            "value": "contoso.gov.cz"
-        },
-        "govDomainId": {
-            "value": "dc3cabe2-5ce6-451c-be4c-4b67c2da3270"
-        },
-        "frontDoorResourceId": {
-            "value": "/subscriptions/17ab5b7a-9070-406c-811d-c3bf2b2c9371/resourceGroups/shared/providers/Microsoft.Cdn/profiles/fdmachv"
-        },
-        "$connections": {
-            "type": "Object",
-            "value": {
-                "keyvault": {
-                    "id": "/subscriptions/17ab5b7a-9070-406c-811d-c3bf2b2c9371/providers/Microsoft.Web/locations/francecentral/managedApis/keyvault",
-                    "connectionId": "/subscriptions/17ab5b7a-9070-406c-811d-c3bf2b2c9371/resourceGroups/rg-govdns/providers/Microsoft.Web/connections/la-govcz-fd-keyvault",
-                    "connectionName": "la-govcz-fd-keyvault",
-                    "connectionProperties": {
-                        "authentication": {
-                            "type": "ManagedServiceIdentity"
-                        }
-                    }
-                }
-            }
-        }
     }
 }
