@@ -40,7 +40,7 @@ az deployment group create \
 
 ## Grant rights to send email
 
-Logic App uses User-assigned Managed Identity to call Graph API to send email from mailbox (can be shared one). In order to do that it needs `Mail.Send` permission.
+Logic App uses User-assigned Managed Identity to call Graph API to send email from mailbox (can be shared one). In order to do that it needs `Mail.Send` permission. This needs to be assigned by Global Admin.
 
 ```powershell
 $managedIdentityServicePrincipalId = az ad sp list --filter "displayName eq 'mi-govczdns'" --query "[0].id" --output tsv
