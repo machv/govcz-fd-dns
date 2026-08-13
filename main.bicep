@@ -64,8 +64,10 @@ var normalizedDnsGovApiUrl = endsWith(dnsGovApiUrl, '/')
   ? substring(dnsGovApiUrl, 0, max([length(dnsGovApiUrl) - 1, 0]))
   : dnsGovApiUrl
 
+param managedIdentityName string = 'mi-govcz-fd'
+
 resource managedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2018-11-30' = {
-  name: 'mi-govczdns'
+  name: managedIdentityName
   location: location
 }
 
