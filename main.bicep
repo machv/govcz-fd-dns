@@ -4,10 +4,10 @@ targetScope = 'resourceGroup'
 param location string = resourceGroup().location
 
 @description('Name of the Consumption Logic App.')
-param logicAppName string
+param logicAppName string = 'la-govcz-fd'
 
 @description('Globally unique name of the Key Vault.')
-param keyVaultName string
+param keyVaultName string = 'kv-la-govcz-fd-${uniqueString(resourceGroup().id)}'
 
 @description('Name of the Key Vault API connection.')
 param keyVaultConnectionName string = '${logicAppName}-keyvault'
@@ -30,6 +30,9 @@ param emailNotificationSenderUpn string
 @description('Email address that receives workflow notifications.')
 param emailNotificationReceipient string
 
+@description('Enable email notifications sent by the Logic App.')
+param emailNotificationsEnabled bool = true
+
 @secure()
 @description('GOV.CZ API key stored as the govcz-api-key Key Vault secret.')
 param govCzApiKey string
@@ -45,7 +48,7 @@ param tags object = {}
 
 param keyVaultTags object = {}
 
-var workflowSource = loadJsonContent('logicapp.json')
+var workflowSource = loadJsonContent('app/la-govcz-fd.json')
 var keyVaultSecretName = 'govcz-api-key'
 var keyVaultSecretsUserRoleDefinitionId = subscriptionResourceId(
   'Microsoft.Authorization/roleDefinitions',
@@ -142,6 +145,9 @@ resource logicApp 'Microsoft.Logic/workflows@2019-05-01' = {
       }
       emailNotificationReceipient: {
         value: emailNotificationReceipient
+      }
+      emailNotificationsEnabled: {
+        value: emailNotificationsEnabled
       }
       frontDoorResourceId: {
         value: frontDoorResourceId
