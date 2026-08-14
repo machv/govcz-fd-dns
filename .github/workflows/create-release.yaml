@@ -1,0 +1,102 @@
+name: Create release
+
+defaults:
+  run:
+    shell: pwsh
+
+on:
+  workflow_dispatch: 
+
+jobs:
+  new-version:
+    environment: release
+    name: Bump version
+    runs-on: ubuntu-latest
+    permissions:
+      # needed to create a release
+      contents: write 
+    outputs:
+      previous_tag: ${{ steps.bump.outputs.previous_tag }}
+      new_tag: ${{ steps.bump.outputs.new_tag }}
+    steps:
+      - uses: actions/checkout@v3
+      - id: bump
+        name: Bump version
+        run: |
+          $today = Get-Date
+          $newVersion = @($today.ToString("yy"), "1")
+          git fetch --tags
+          # Get the latest tag that matches our versioning schema (starts with letter v)
+          $hash = git rev-list --tags=v* --topo-order --max-count=1
+          if($hash) {
+            $currentTag = git describe --tags $hash
+            $parts = $currentTag.Substring(1) -split '\.'
+            if($parts[0] -eq $today.ToString("yy")) { $newVersion[1] = ([int]$parts[1] + 1).ToString("0") }
+          }
+          
+          $newTag = "v" + ($newVersion -join ".")
+          git tag $newTag
+          if(-not $?) {
+            throw "Tagging of new release version failed!"
+          }
+          
+          git push origin $newTag
+
+          "New version: $newTag"
+          echo "previous_tag=$currentTag" >> $env:GITHUB_OUTPUT
+          echo "new_tag=$newTag" >> $env:GITHUB_OUTPUT
+
+  new-release:
+    name: Create release
+    runs-on: ubuntu-latest
+    permissions:
+      # needed to create a release
+      contents: write 
+    needs: new-version
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - name: Build Bicep
+        shell: bash
+        run: |
+          az bicep build --file main.bicep
+      - name: Create changelog
+        id: changelog
+        shell: pwsh
+        run: |
+          if("${{ needs.new-version.outputs.previous_tag }}" -ne "") {
+            $changelog = (& { git log ${{ needs.new-version.outputs.previous_tag }}..HEAD --pretty=format:'- %s (%h)' --abbrev-commit -- . }) -join "`n"
+            "Changes for ${{ needs.new-version.outputs.previous_tag }} are:"
+            $changelog
+          } else {
+            $changelog = ""
+          }
+          
+          $rawSub = 'https://cors.mach.im/${{ github.server_url }}/${{ github.repository }}/releases/download/${{ needs.new-version.outputs.new_tag }}/main.json'
+          $encodedArmJsonUrlSub = [System.Net.WebUtility]::UrlEncode($rawSub)
+
+          $changeLogContent = @"
+
+          Deploys Logic Apps to selected resource group
+          [![Deploy To Azure](https://raw.githubusercontent.com/Azure/azure-quickstart-templates/master/1-CONTRIBUTION-GUIDE/images/deploytoazure.svg?sanitize=true)](https://portal.azure.com/#create/Microsoft.Template/uri/$encodedArmJsonUrlSub)
+
+          "@
+          
+          if($changelog -ne "") {
+            $changeLogContent += @"
+          ## Changes in this version
+          $changelog
+          "@
+          }
+          
+          Set-Content -Value $changeLogContent -Path .\changelog.md
+      - name: Create new release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ needs.new-version.outputs.new_tag }} # ${{ github.ref }}
+          name: Release ${{ needs.new-version.outputs.new_tag }} # ${{ github.ref }}
+          generate_release_notes: false
+          body_path: changelog.md
+          files: |
+           main.json
