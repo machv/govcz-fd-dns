@@ -7,7 +7,7 @@ param location string = resourceGroup().location
 param logicAppName string = 'la-govcz-fd'
 
 @description('Globally unique name of the Key Vault.')
-param keyVaultName string = 'kv-la-govcz-fd-${uniqueString(resourceGroup().id)}'
+param keyVaultName string = substring('kv-la-govcz-fd-${uniqueString(resourceGroup().id)}', 0, 24)
 
 @description('Name of the Key Vault API connection.')
 param keyVaultConnectionName string = '${logicAppName}-keyvault'
