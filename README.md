@@ -27,8 +27,11 @@ Přístupy k Azure Front Door, Key Vault a Microsoft Graph probíhají prostřed
 - API připojení ke Key Vault s využitím spravované identity
 - roli `Key Vault Secrets User` pro Logic App na úrovni Key Vaultu
 - roli `CDN Profile Contributor` na už existující Front Door profil
+- volitelné pravidlo Azure Monitor pro metriku `Runs Failed`, které upozorní na neúspěšné běhy Logic App
 
 Role `CDN Profile Contributor` je potřeba z důvodu volání operace `refreshValidationToken` v případě expirovaného TXT záznamu.
+
+Pravidlo pro neúspěšné běhy je ve výchozím nastavení vypnuté. Zapnete ho parametrem `failedRunsAlertEnabled = true`; upozornění se odešlou na adresu z parametru `emailNotificationReceipient`.
 
 Front Door Resource ID může odkazovat na jinou skupinu prostředků nebo jiné předplatné v rámci jednoho Entra ID tenantu. Identita pod kterou se spouští Bicep musí mít oprávnění vytvářet přiřazení rolí na daném profilu Front Door a Key Vaultu. Bicep skript musí být spuštěn na skupině prostředků.
 
@@ -46,6 +49,7 @@ param govZoneName = 'contoso.gov.cz'
 param govDomainId = '<gov-cz-domain-id>'
 param emailNotificationSenderUpn = 'sluzebnicek@contoso.gov.cz'
 param emailNotificationReceipient = 'admin@consoto.gov.cz'
+param failedRunsAlertEnabled = true
 param govCzApiKey = readEnvironmentVariable('GOVCZ_API_KEY', '')
 param grantKeyVaultSecretsOfficerToDeployer = true
 ```

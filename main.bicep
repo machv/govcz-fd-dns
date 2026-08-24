@@ -33,6 +33,9 @@ param emailNotificationReceipient string
 @description('Enable email notifications sent by the Logic App.')
 param emailNotificationsEnabled bool = true
 
+@description('Deploy an Azure Monitor alert for failed Logic App runs and email the configured notification recipient.')
+param failedRunsAlertEnabled bool = false
+
 @secure()
 @description('GOV.CZ API key stored as the govcz-api-key Key Vault secret.')
 param govCzApiKey string
@@ -171,6 +174,61 @@ resource logicApp 'Microsoft.Logic/workflows@2019-05-01' = {
         }
       }
     }
+  }
+}
+
+resource failedRunsActionGroup 'Microsoft.Insights/actionGroups@2023-01-01' = if (failedRunsAlertEnabled) {
+  name: '${logicAppName}-failed-runs-group'
+  location: 'global'
+  tags: tags
+  properties: {
+    groupShortName: substring(uniqueString(resourceGroup().id, logicAppName), 0, 12)
+    enabled: true
+    emailReceivers: [
+      {
+        name: 'Logic App failed runs'
+        emailAddress: emailNotificationReceipient
+        useCommonAlertSchema: true
+      }
+    ]
+  }
+}
+
+resource failedRunsAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = if (failedRunsAlertEnabled) {
+  name: '${logicAppName}-failed-runs-alert'
+  location: 'global'
+  tags: tags
+  properties: {
+    description: 'Alerts when the Logic App has one or more failed runs.'
+    severity: 1
+    enabled: true
+    scopes: [
+      logicApp.id
+    ]
+    evaluationFrequency: 'PT5M'
+    windowSize: 'PT5M'
+    criteria: {
+      'odata.type': 'Microsoft.Azure.Monitor.SingleResourceMultipleMetricCriteria'
+      allOf: [
+        {
+          name: 'FailedRuns'
+          metricNamespace: 'Microsoft.Logic/workflows'
+          metricName: 'RunsFailed'
+          operator: 'GreaterThan'
+          threshold: 0
+          timeAggregation: 'Total'
+          criterionType: 'StaticThresholdCriterion'
+        }
+      ]
+    }
+    autoMitigate: true
+    targetResourceType: 'Microsoft.Logic/workflows'
+    targetResourceRegion: location
+    actions: [
+      {
+        actionGroupId: failedRunsActionGroup.id
+      }
+    ]
   }
 }
 
