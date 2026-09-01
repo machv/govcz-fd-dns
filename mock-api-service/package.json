@@ -1,0 +1,18 @@
+{
+  "name": "dnsportal-api-mock",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Stateful mock of the Czech government DNSPortal API",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "redis": "^5.8.1"
+  }
+}
