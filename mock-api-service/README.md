@@ -61,7 +61,7 @@ deployment values, and create a resource group in France Central:
 ```bash
 az login
 
-RESOURCE_GROUP="rg-dnsportal-api-mock"
+RESOURCE_GROUP="rg-gvdns-api-mock"
 LOCATION="francecentral"
 PORTAL_PASSWORD="replace-with-a-strong-password"
 
