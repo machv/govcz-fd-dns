@@ -561,7 +561,7 @@
                                 },
                                 "type": "SetVariable",
                                 "inputs": {
-                                    "name": "currentValidationState",
+                                    "name": "currentValidationToken",
                                     "value": "@body('Parse_JSON_Validation_response')?['properties']?['validationProperties']?['validationToken']"
                                 }
                             },
@@ -632,7 +632,7 @@
                                 "type": "SetVariable",
                                 "inputs": {
                                     "name": "currentValidationState",
-                                    "value": "@body('Parse_JSON_Validation_response')?['properties']?['validationProperties']?['validationState']"
+                                    "value": "@body('Parse_JSON_Validation_response')?['properties']?['validationProperties']?['domainValidationState']"
                                 }
                             }
                         },
